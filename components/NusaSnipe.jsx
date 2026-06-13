@@ -379,6 +379,8 @@ TARGET PASAR:
 
 GAYA: Bahasa Indonesia formal tapi tidak kaku. Selalu sertakan referensi standar (NFPA, ISO, OSHA, PP 50/2012) saat membahas teknis. Output praktis & langsung pakai. Saat menulis email atau proposal, gunakan email resmi (${COMPANY_CONFIG.email}) dan website (${COMPANY_CONFIG.website}) di footer/signature.
 
+FORMAT JAWABAN: Tulis ringkas dan rapi. Gunakan paragraf pendek. Untuk daftar, pakai bullet sederhana ("- ") atau penomoran ("1. "). Boleh pakai **tebal** seperlunya untuk istilah penting saja. JANGAN gunakan garis pemisah horizontal (---), JANGAN pakai heading bertingkat berlebihan, dan hindari tabel ASCII. Jangan berlebihan memakai simbol.
+
 Bantulah pengguna dengan: draft email cold outreach, draft proposal, ringkasan klien, strategi follow-up, terjemahan, analisa peluang, dan rekomendasi taktis.`;
 
 /* ============== UTILITY HOOKS ============== */
@@ -539,31 +541,31 @@ export default function NusaSnipe() {
       const rp = await storage.get(STORAGE_KEYS.replies);
       const pr = await storage.get(STORAGE_KEYS.proposals);
       const co = await storage.get(STORAGE_KEYS.company);
-      setClients(cl ? safeParse(cl, SEED_CLIENTS) : SEED_CLIENTS);
-      setContacts(ct ? safeParse(ct, SEED_CONTACTS) : SEED_CONTACTS);
-      setDeals(dl ? safeParse(dl, SEED_DEALS) : SEED_DEALS);
-      setActivities(ac ? safeParse(ac, SEED_ACTIVITIES) : SEED_ACTIVITIES);
-      setTemplates(tp ? safeParse(tp, SEED_TEMPLATES) : SEED_TEMPLATES);
-      setCampaigns(cp ? safeParse(cp, SEED_CAMPAIGNS) : SEED_CAMPAIGNS);
-      setMeetingTypes(mt ? safeParse(mt, SEED_MEETING_TYPES) : SEED_MEETING_TYPES);
-      setBookings(bk ? safeParse(bk, SEED_BOOKINGS) : SEED_BOOKINGS);
-      setSignals(sg ? safeParse(sg, SEED_SIGNALS) : SEED_SIGNALS);
-      setReplies(rp ? safeParse(rp, SEED_REPLIES) : SEED_REPLIES);
-      setProposals(pr ? safeParse(pr, SEED_PROPOSALS) : SEED_PROPOSALS);
+      setClients(cl ? safeParse(cl, []) : []);
+      setContacts(ct ? safeParse(ct, []) : []);
+      setDeals(dl ? safeParse(dl, []) : []);
+      setActivities(ac ? safeParse(ac, []) : []);
+      setTemplates(tp ? safeParse(tp, []) : []);
+      setCampaigns(cp ? safeParse(cp, []) : []);
+      setMeetingTypes(mt ? safeParse(mt, []) : []);
+      setBookings(bk ? safeParse(bk, []) : []);
+      setSignals(sg ? safeParse(sg, []) : []);
+      setReplies(rp ? safeParse(rp, []) : []);
+      setProposals(pr ? safeParse(pr, []) : []);
       const mergedCompany = co ? { ...COMPANY_CONFIG, ...safeParse(co, {}) } : { ...COMPANY_CONFIG };
       Object.assign(COMPANY_CONFIG, mergedCompany);
       setCompany(mergedCompany);
-      if (!cl) await storage.set(STORAGE_KEYS.clients, JSON.stringify(SEED_CLIENTS));
-      if (!ct) await storage.set(STORAGE_KEYS.contacts, JSON.stringify(SEED_CONTACTS));
-      if (!dl) await storage.set(STORAGE_KEYS.deals, JSON.stringify(SEED_DEALS));
-      if (!ac) await storage.set(STORAGE_KEYS.activities, JSON.stringify(SEED_ACTIVITIES));
-      if (!tp) await storage.set(STORAGE_KEYS.templates, JSON.stringify(SEED_TEMPLATES));
-      if (!cp) await storage.set(STORAGE_KEYS.campaigns, JSON.stringify(SEED_CAMPAIGNS));
-      if (!mt) await storage.set(STORAGE_KEYS.meetingTypes, JSON.stringify(SEED_MEETING_TYPES));
-      if (!bk) await storage.set(STORAGE_KEYS.bookings, JSON.stringify(SEED_BOOKINGS));
-      if (!sg) await storage.set(STORAGE_KEYS.signals, JSON.stringify(SEED_SIGNALS));
-      if (!rp) await storage.set(STORAGE_KEYS.replies, JSON.stringify(SEED_REPLIES));
-      if (!pr) await storage.set(STORAGE_KEYS.proposals, JSON.stringify(SEED_PROPOSALS));
+      if (!cl) await storage.set(STORAGE_KEYS.clients, JSON.stringify([]));
+      if (!ct) await storage.set(STORAGE_KEYS.contacts, JSON.stringify([]));
+      if (!dl) await storage.set(STORAGE_KEYS.deals, JSON.stringify([]));
+      if (!ac) await storage.set(STORAGE_KEYS.activities, JSON.stringify([]));
+      if (!tp) await storage.set(STORAGE_KEYS.templates, JSON.stringify([]));
+      if (!cp) await storage.set(STORAGE_KEYS.campaigns, JSON.stringify([]));
+      if (!mt) await storage.set(STORAGE_KEYS.meetingTypes, JSON.stringify([]));
+      if (!bk) await storage.set(STORAGE_KEYS.bookings, JSON.stringify([]));
+      if (!sg) await storage.set(STORAGE_KEYS.signals, JSON.stringify([]));
+      if (!rp) await storage.set(STORAGE_KEYS.replies, JSON.stringify([]));
+      if (!pr) await storage.set(STORAGE_KEYS.proposals, JSON.stringify([]));
 
       setLoaded(true);
       setAuthChecked(true);
@@ -697,6 +699,17 @@ export default function NusaSnipe() {
     setCurrentUser((prev) => (prev && prev.id === updates.id ? { ...prev, ...updates } : prev));
   }, []);
 
+  const handleResetData = useCallback(async () => {
+    const ok = await confirm("Hapus SEMUA data operasional (klien, kontak, deal, proposal, penagihan, sinyal, booking, kampanye, template, aktivitas)? Profil perusahaan & akun pengguna TETAP aman. Tindakan ini tidak bisa dibatalkan.");
+    if (!ok) return;
+    setClients([]); setContacts([]); setDeals([]); setActivities([]);
+    setTemplates([]); setCampaigns([]); setMeetingTypes([]); setBookings([]);
+    setSignals([]); setReplies([]); setProposals([]);
+    try { await storage.clear(STORAGE_KEYS.ai); } catch (e) { /* ignore */ }
+    setSelectedClientId(null); setSelectedCampaignId(null); setPendingProposalId(null);
+    setView("dashboard");
+  }, [confirm]);
+
   if (!authChecked) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: T.canvas }}>
@@ -735,7 +748,7 @@ export default function NusaSnipe() {
             {effectiveView === "users" && currentUser.role === "admin" && <UsersView users={users} setUsers={setUsers} currentUser={currentUser} confirm={confirm} clients={clients} deals={deals} onUpdateSelf={handleUpdateProfile} />}
             {effectiveView === "company" && currentUser.role === "admin" && <CompanyView company={company} setCompany={setCompany} canEdit={currentUser.role === "admin"} />}
             {effectiveView === "profile" && <ProfileView currentUser={currentUser} onSave={handleUpdateProfile} />}
-            {effectiveView === "settings" && <SettingsView currentUser={currentUser} company={company} onOpenCompany={() => setView("company")} onOpenProfile={() => setView("profile")} />}
+            {effectiveView === "settings" && <SettingsView currentUser={currentUser} company={company} onOpenCompany={() => setView("company")} onOpenProfile={() => setView("profile")} onResetData={handleResetData} />}
           </main>
         </div>
       </div>
@@ -1854,6 +1867,81 @@ function AICopilotDrawer({ open, onClose, context, clients, contacts, deals, act
   );
 }
 
+/* Lightweight markdown renderer — turns **bold**, lists, headings, --- into clean UI */
+function mdInline(text, kp) {
+  const out = [];
+  const re = /(\*\*([^*]+?)\*\*|__([^_]+?)__|`([^`]+?)`|\*([^*\n]+?)\*)/g;
+  let last = 0, m, i = 0;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    if (m[2] !== undefined || m[3] !== undefined) out.push(<strong key={`${kp}-b${i}`} style={{ fontWeight: 600 }}>{m[2] !== undefined ? m[2] : m[3]}</strong>);
+    else if (m[4] !== undefined) out.push(<code key={`${kp}-c${i}`} style={{ fontFamily: FONT_MONO, fontSize: "0.9em", background: T.surfaceAlt, padding: "1px 4px", borderRadius: "4px" }}>{m[4]}</code>);
+    else if (m[5] !== undefined) out.push(<em key={`${kp}-i${i}`}>{m[5]}</em>);
+    last = m.index + m[0].length; i++;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
+function MarkdownLite({ text, color }) {
+  if (!text) return null;
+  const lines = String(text).replace(/\r/g, "").split("\n");
+  const blocks = [];
+  let para = [], list = null;
+  const flushPara = () => { if (para.length) { blocks.push({ t: "p", lines: para.slice() }); para = []; } };
+  const flushList = () => { if (list) { blocks.push(list); list = null; } };
+  lines.forEach((raw) => {
+    const line = raw.replace(/\s+$/, "");
+    if (line.trim() === "") { flushPara(); flushList(); return; }
+    if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) { flushPara(); flushList(); blocks.push({ t: "hr" }); return; }
+    const h = line.match(/^\s*(#{1,4})\s+(.*)$/);
+    if (h) { flushPara(); flushList(); blocks.push({ t: "h", lvl: h[1].length, text: h[2] }); return; }
+    const b = line.match(/^\s*[-*•]\s+(.*)$/);
+    if (b) { flushPara(); if (!list || list.t !== "ul") { flushList(); list = { t: "ul", items: [] }; } list.items.push(b[1]); return; }
+    const n = line.match(/^\s*(\d+)[.)]\s+(.*)$/);
+    if (n) { flushPara(); if (!list || list.t !== "ol") { flushList(); list = { t: "ol", items: [] }; } list.items.push(n[2]); return; }
+    flushList(); para.push(line);
+  });
+  flushPara(); flushList();
+  const c = color || T.ink;
+  return (
+    <div className="space-y-2">
+      {blocks.map((blk, i) => {
+        if (blk.t === "hr") return <div key={i} style={{ height: 1, background: T.ruleSoft, margin: "6px 0" }} />;
+        if (blk.t === "h") {
+          const sz = blk.lvl <= 1 ? 15 : blk.lvl === 2 ? 14 : 13;
+          return <p key={i} className="font-semibold" style={{ color: c, fontSize: `${sz}px`, marginTop: i ? "4px" : 0 }}>{mdInline(blk.text, `h${i}`)}</p>;
+        }
+        if (blk.t === "ul") return (
+          <ul key={i} className="space-y-1">
+            {blk.items.map((it, j) => (
+              <li key={j} className="flex gap-2 text-[13px] leading-relaxed" style={{ color: c }}>
+                <span style={{ color: T.inkFaint }}>•</span><span className="flex-1">{mdInline(it, `ul${i}-${j}`)}</span>
+              </li>
+            ))}
+          </ul>
+        );
+        if (blk.t === "ol") return (
+          <ol key={i} className="space-y-1">
+            {blk.items.map((it, j) => (
+              <li key={j} className="flex gap-2 text-[13px] leading-relaxed" style={{ color: c }}>
+                <span className="font-medium" style={{ color: T.navy, minWidth: "16px" }}>{j + 1}.</span><span className="flex-1">{mdInline(it, `ol${i}-${j}`)}</span>
+              </li>
+            ))}
+          </ol>
+        );
+        return (
+          <p key={i} className="text-[13px] leading-relaxed" style={{ color: c }}>
+            {blk.lines.map((ln, j) => (
+              <span key={j}>{mdInline(ln, `p${i}-${j}`)}{j < blk.lines.length - 1 ? <br /> : null}</span>
+            ))}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
 function ChatMessage({ role, content }) {
   const [copied, setCopied] = useState(false);
   const handleCopy = () => {
@@ -1878,7 +1966,7 @@ function ChatMessage({ role, content }) {
         <Sparkles size={12} color="#fff" />
       </div>
       <div className="flex-1 max-w-[85%] rounded-lg p-3" style={{ background: T.surface, border: `1px solid ${T.rule}` }}>
-        <p className="text-[13px] leading-relaxed whitespace-pre-wrap" style={{ color: T.ink }}>{content}</p>
+        <MarkdownLite text={content} />
         <button onClick={handleCopy} className="mt-2 text-[10px] flex items-center gap-1 opacity-60 hover:opacity-100 transition-opacity" style={{ color: T.inkSoft, fontFamily: FONT_MONO }}>
           {copied ? <CheckCircle2 size={10} /> : <Copy size={10} />}
           {copied ? "TERSALIN" : "SALIN"}
@@ -1889,7 +1977,7 @@ function ChatMessage({ role, content }) {
 }
 
 /* ============== SETTINGS VIEW ============== */
-function SettingsView({ currentUser, company, onOpenCompany, onOpenProfile }) {
+function SettingsView({ currentUser, company, onOpenCompany, onOpenProfile, onResetData }) {
   return (
     <div>
       <div className="mb-6">
@@ -1992,6 +2080,20 @@ function SettingsView({ currentUser, company, onOpenCompany, onOpenProfile }) {
             <p className="text-[11px] leading-relaxed" style={{ color: T.inkSoft }}>Migrate ke Next.js + Vercel + Upstash Redis. Integrasi real ESP (Resend/Brevo), WhatsApp BSP (Wati/Qiscus), Google Calendar API, NextAuth.js, dan cron job untuk sequence runner.</p>
           </div>
         </Panel>
+
+        {currentUser.role === "admin" && onResetData && (
+          <Panel title="Zona Berbahaya" icon={AlertCircle} accent={T.red} className="col-span-2">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div className="flex-1 min-w-[280px]">
+                <p className="text-[13px] font-medium mb-1" style={{ color: T.ink }}>Reset & mulai dari awal</p>
+                <p className="text-[11px] leading-relaxed" style={{ color: T.inkSoft }}>Menghapus semua data operasional (klien, kontak, deal, proposal, penagihan, sinyal, booking, kampanye, template, aktivitas) supaya Anda mulai dari nol dengan data asli. <strong style={{ color: T.ink }}>Profil perusahaan & akun pengguna tetap aman.</strong> Cocok dipakai sekali setelah deploy untuk membersihkan data contoh.</p>
+              </div>
+              <button onClick={onResetData} className="px-4 py-2.5 rounded-md text-sm text-white flex items-center gap-1.5 flex-shrink-0" style={{ background: T.red }}>
+                <Trash2 size={14} /> Hapus semua data operasional
+              </button>
+            </div>
+          </Panel>
+        )}
       </div>
     </div>
   );
@@ -3848,6 +3950,18 @@ function HunterView({ signals, setSignals, clients, setClients, currentUser, con
   const [selectedSignal, setSelectedSignal] = useState(null);
   const [convertingSignal, setConvertingSignal] = useState(null);
   const [scoringId, setScoringId] = useState(null);
+  const [keywords, setKeywords] = useState([]);
+  const [kwInput, setKwInput] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState(null);
+  const [searchResult, setSearchResult] = useState(null);
+
+  const addKeyword = (val) => {
+    const k = (val !== undefined ? val : kwInput).trim();
+    if (k && !keywords.some((x) => x.toLowerCase() === k.toLowerCase())) setKeywords((prev) => [...prev, k]);
+    setKwInput("");
+  };
+  const removeKeyword = (k) => setKeywords((prev) => prev.filter((x) => x !== k));
 
   const filtered = useMemo(() => {
     let result = signals;
@@ -3911,7 +4025,58 @@ function HunterView({ signals, setSignals, clients, setClients, currentUser, con
     }
   }, [confirm, setSignals]);
 
-  const sources = ["all", "linkedin", "lpse", "inaproc", "news", "vendor_portal"];
+  const handleSearch = useCallback(async () => {
+    const allKw = kwInput.trim() ? [...keywords, kwInput.trim()] : keywords;
+    if (allKw.length === 0) { setSearchError("Masukkan minimal satu keyword."); return; }
+    setKwInput("");
+    setKeywords(allKw);
+    setSearching(true); setSearchError(null); setSearchResult(null);
+    try {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 2200,
+          system: `Anda AI prospect researcher untuk ${COMPANY_CONFIG.brandName} (${COMPANY_CONFIG.legalName}), konsultan QHSE & fire protection Indonesia. Layanan: SMK3 (PP 50/2012), ISO 45001, ISO 14001, fire protection engineering & audit (NFPA), HAZID/HAZOP, risk assessment. Berdasarkan keyword dari tim marketing, hasilkan daftar 6-8 PROSPEK perusahaan di Indonesia yang relevan dan kemungkinan besar membutuhkan layanan tersebut. Utamakan perusahaan nyata yang dikenal di sektor terkait. Untuk setiap prospek, dasarkan alasan pada profil industri & kebutuhan QHSE umum — JANGAN mengarang berita/kejadian spesifik yang belum tentu benar. Output HARUS berupa JSON array murni tanpa teks lain: [{"companyName":"<nama PT>","industry":"<industri>","location":"<kota, provinsi>","title":"<ringkas peluang, maks 10 kata>","description":"<2-3 kalimat: kebutuhan QHSE & kenapa relevan>","aiScore":<angka 0-100 tingkat kecocokan>,"aiReasoning":"<1-2 kalimat: alasan skor + saran approach singkat>"}]`,
+          messages: [{ role: "user", content: `Keyword pencarian dari tim marketing: ${allKw.join(", ")}\n\nCarikan prospek perusahaan yang paling relevan dengan keyword di atas untuk ditawari layanan QHSE/fire protection Nusa Safety. Beri skor kecocokan realistis.` }],
+        }),
+      });
+      if (!response.ok) throw new Error(`API ${response.status}`);
+      const data = await response.json();
+      const text = data.content && data.content[0] && data.content[0].text ? data.content[0].text : "";
+      const jsonMatch = text.match(/\[[\s\S]*\]/);
+      if (!jsonMatch) throw new Error("Format respons AI tidak valid");
+      const arr = JSON.parse(jsonMatch[0]);
+      if (!Array.isArray(arr) || arr.length === 0) throw new Error("Tidak ada prospek ditemukan, coba keyword lain");
+      const now = new Date().toISOString();
+      const newSignals = arr.map((p) => ({
+        id: newId("sig"),
+        source: "ai_research",
+        title: p.title || `Peluang: ${p.companyName || "Prospek"}`,
+        description: p.description || "",
+        companyName: p.companyName || "—",
+        industry: p.industry || "—",
+        location: p.location || "—",
+        signalDate: now,
+        aiScore: typeof p.aiScore === "number" ? Math.max(0, Math.min(100, Math.round(p.aiScore))) : 60,
+        status: "new",
+        relatedClientId: null,
+        sourceUrl: "",
+        aiReasoning: p.aiReasoning || "",
+        searchKeywords: allKw.slice(),
+      }));
+      setSignals((prev) => [...newSignals, ...prev]);
+      setSearchResult(newSignals.length);
+      setFilterStatus("new"); setFilterSource("all"); setSortBy("score");
+    } catch (err) {
+      setSearchError(err.message || "Gagal mencari prospek");
+    } finally {
+      setSearching(false);
+    }
+  }, [keywords, kwInput, setSignals]);
+
+  const sources = ["all", "ai_research", "linkedin", "lpse", "inaproc", "news", "vendor_portal"];
   const statuses = ["all", "new", "reviewed", "converted", "dismissed"];
 
   return (
@@ -3926,6 +4091,68 @@ function HunterView({ signals, setSignals, clients, setClients, currentUser, con
             </span>
           </div>
           <p className="text-sm" style={{ color: T.inkSoft }}>Sinyal prospek dari LinkedIn, LPSE, INAPROC, news, vendor portal — di-score otomatis oleh Claude</p>
+        </div>
+      </div>
+
+      {/* AI keyword search */}
+      <div className="rounded-xl p-5 mb-6" style={{ background: T.surface, border: `1px solid ${T.rule}` }}>
+        <div className="flex items-center gap-2 mb-1.5">
+          <div className="w-7 h-7 rounded-md flex items-center justify-center" style={{ background: T.redSoft }}><Crosshair size={14} style={{ color: T.red }} /></div>
+          <p className="text-[14px] font-semibold" style={{ color: T.ink }}>Mulai pencarian prospek</p>
+          <span className="text-[10px] px-1.5 py-0.5 rounded uppercase tracking-wider flex items-center gap-1" style={{ background: T.navySoft, color: T.navy, fontFamily: FONT_MONO }}><Sparkles size={9} /> AI</span>
+        </div>
+        <p className="text-[11px] mb-3" style={{ color: T.inkSoft }}>Masukkan tema/keyword: industri, layanan, lokasi, atau kebutuhan. Bisa <strong>lebih dari satu keyword</strong> agar hasilnya lebih menyeluruh. Tekan Enter untuk menambah.</p>
+
+        {keywords.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            {keywords.map((k) => (
+              <span key={k} className="inline-flex items-center gap-1 text-[12px] px-2 py-1 rounded-md" style={{ background: T.navySoft, color: T.navy }}>
+                {k}
+                <button onClick={() => removeKeyword(k)} aria-label="Hapus keyword"><X size={11} /></button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={kwInput}
+            onChange={(e) => setKwInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addKeyword(); } }}
+            placeholder="contoh: pertambangan nikel Sulawesi, ISO 45001, pabrik kimia, geothermal…"
+            style={{ ...inputStyle, flex: 1 }}
+          />
+          <button onClick={() => addKeyword()} disabled={!kwInput.trim()} className="px-3 py-2 rounded-md text-[12px] flex items-center gap-1 flex-shrink-0 disabled:opacity-40" style={{ background: T.surface, color: T.navy, border: `1px solid ${T.rule}` }}>
+            <Plus size={13} /> Tambah
+          </button>
+          <button onClick={handleSearch} disabled={searching || (keywords.length === 0 && !kwInput.trim())} className="px-4 py-2 rounded-md text-[12px] text-white flex items-center gap-1.5 flex-shrink-0 disabled:opacity-50" style={{ background: T.red }}>
+            {searching ? <><Loader2 size={13} className="animate-spin" /> Mencari…</> : <><Crosshair size={13} /> Mulai pencarian</>}
+          </button>
+        </div>
+
+        <div className="flex items-center gap-1.5 mt-3 flex-wrap">
+          <span className="text-[10px]" style={{ color: T.inkFaint }}>Saran cepat:</span>
+          {["Pertambangan", "Migas & Geothermal", "Manufaktur", "Konstruksi BUMN", "ISO 45001", "SMK3", "Fire protection", "Pabrik kimia"].map((s) => (
+            <button key={s} onClick={() => addKeyword(s)} className="text-[10px] px-2 py-0.5 rounded-md" style={{ background: T.surfaceAlt, color: T.inkSoft, border: `1px solid ${T.ruleSoft}` }}>+ {s}</button>
+          ))}
+        </div>
+
+        {searchError && (
+          <div className="rounded-md p-2.5 mt-3 flex items-start gap-2" style={{ background: T.redSoft, border: `1px solid ${T.red}` }}>
+            <AlertCircle size={13} style={{ color: T.red }} className="flex-shrink-0 mt-0.5" />
+            <p className="text-[11px]" style={{ color: T.red }}>{searchError}</p>
+          </div>
+        )}
+        {searchResult !== null && !searchError && (
+          <div className="rounded-md p-2.5 mt-3 flex items-start gap-2" style={{ background: T.sageSoft, border: `1px solid ${T.sage}` }}>
+            <CheckCircle2 size={13} style={{ color: T.sage }} className="flex-shrink-0 mt-0.5" />
+            <p className="text-[11px]" style={{ color: T.sage }}>Ditemukan <strong>{searchResult} prospek baru</strong> — sudah ditambahkan ke daftar di bawah (sumber: AI Research). Klik kartu untuk detail, atau "Jadikan klien" untuk konversi.</p>
+          </div>
+        )}
+        <div className="rounded-md p-2.5 mt-3 flex items-start gap-2" style={{ background: T.amberSoft, border: `1px solid ${T.amber}` }}>
+          <AlertCircle size={12} style={{ color: T.amber }} className="flex-shrink-0 mt-0.5" />
+          <p className="text-[10px] leading-relaxed" style={{ color: T.amber }}>Hasil AI bersifat <strong>rekomendasi awal</strong> untuk riset — verifikasi kontak & kebutuhan aktual sebelum outreach. <strong>Production:</strong> sambungkan scraper nyata (LinkedIn, LPSE/INAPROC, news API) di <span style={{ fontFamily: FONT_MONO }}>/api/hunter/search</span> untuk sinyal real-time.</p>
         </div>
       </div>
 
@@ -3991,6 +4218,7 @@ function HunterView({ signals, setSignals, clients, setClients, currentUser, con
 /* ============== SIGNAL CARD ============== */
 function SignalCard({ signal, relatedClient, onOpen, onConvert, onDismiss, onAi, onRescore, scoring, onOpenClient }) {
   const sourceConf = {
+    ai_research: { label: "AI Research", color: T.navy, bg: T.navySoft, Icon: Sparkles },
     linkedin: { label: "LinkedIn", color: "#0A66C2", bg: "#E7EEF6", Icon: Linkedin },
     lpse: { label: "LPSE", color: T.navy, bg: T.navySoft, Icon: FileSpreadsheet },
     inaproc: { label: "INAPROC", color: T.amber, bg: T.amberSoft, Icon: FileSearch },
@@ -6837,7 +7065,7 @@ function ReportsView({ proposals, clients, deals, signals, bookings, campaigns, 
         {aiError ? (
           <p className="text-[12px]" style={{ color: T.red }}>Gagal: {aiError}</p>
         ) : aiSummary ? (
-          <p className="text-[13px] leading-relaxed whitespace-pre-wrap" style={{ color: T.ink }}>{aiSummary}</p>
+          <MarkdownLite text={aiSummary} />
         ) : (
           <p className="text-[12px]" style={{ color: T.inkSoft }}>Klik "Generate ringkasan" agar AI menulis narasi kondisi + rekomendasi aksi berdasarkan data periode ini. Bisa langsung disalin ke laporan PDF/presentasi.</p>
         )}
