@@ -94,6 +94,9 @@ const COMPANY_CONFIG = {
 const memStore = {};
 let storageBackend = null; // "remote" = window.storage (DB), "memory" = fallback sementara
 function getStorageBackend() { return storageBackend; }
+let saveListener = null;
+function setSaveListener(fn) { saveListener = fn; }
+function notifySave(ok) { try { if (saveListener) saveListener(ok); } catch (e) { /* ignore */ } }
 const storage = {
   async get(key) {
     try {
@@ -102,19 +105,20 @@ const storage = {
         storageBackend = "remote";
         return result ? result.value : null;
       }
-    } catch (e) { storageBackend = "memory"; }
-    storageBackend = storageBackend || "memory";
+    } catch (e) { /* fall through */ }
+    storageBackend = "memory";
     return memStore[key] || null;
   },
   async set(key, value) {
     try {
       if (typeof window !== "undefined" && window.storage && typeof window.storage.set === "function") {
         const result = await window.storage.set(key, value);
-        if (result) { storageBackend = "remote"; return true; }
+        if (result) { storageBackend = "remote"; notifySave(true); return true; }
       }
-    } catch (e) { storageBackend = "memory"; }
-    storageBackend = storageBackend || "memory";
+    } catch (e) { /* fall through */ }
+    storageBackend = "memory";
     memStore[key] = value;
+    notifySave(false);
     return true;
   },
   async clear(key) {
@@ -590,6 +594,17 @@ export default function NusaSnipe() {
   const [aiContext, setAiContext] = useState(null);
   const [loaded, setLoaded] = useState(false);
   const [dbStatus, setDbStatus] = useState("checking");
+  const [saveState, setSaveState] = useState("idle"); // "idle" | "saved" | "error"
+  const saveTimerRef = useRef(null);
+  useEffect(() => {
+    setSaveListener((ok) => {
+      if (!ok) { setSaveState("error"); return; }
+      setSaveState("saved");
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => setSaveState("idle"), 1600);
+    });
+    return () => setSaveListener(null);
+  }, []);
   const [pendingProposalId, setPendingProposalId] = useState(null);
   const { confirm, Dialog: ConfirmDialog } = useConfirm();
 
@@ -886,7 +901,23 @@ export default function NusaSnipe() {
       <div className="flex">
         <Sidebar view={effectiveView} onView={(v) => { setView(v); setSelectedClientId(null); setSelectedCampaignId(null); }} onOpenAi={() => openAi(null)} currentUser={currentUser} onLogout={handleLogout} unreadReplies={visibleReplies.filter((r) => r.status === "unread").length} newSignals={visibleSignals.filter((s) => s.status === "new").length} billingAlerts={billingAlerts} newLeads={visibleLeads.filter((l) => l.status === "new").length} />
         <div className="flex-1 min-w-0">
-          <TopBar currentUser={currentUser} onLogout={handleLogout} onOpenProfile={() => setView("profile")} />
+          <TopBar currentUser={currentUser} onLogout={handleLogout} onOpenProfile={() => setView("profile")} dbStatus={dbStatus} saveState={saveState} />
+          {dbStatus === "local" && (
+            <div className="px-6 pt-4">
+              <div className="rounded-lg p-3.5 flex items-start gap-2.5" style={{ background: T.redSoft, border: `1px solid ${T.red}` }}>
+                <AlertCircle size={18} style={{ color: T.red }} className="flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-[13px] font-semibold mb-0.5" style={{ color: T.red }}>Perubahan TIDAK tersimpan permanen</p>
+                  <p className="text-[11px] leading-relaxed" style={{ color: T.red }}>
+                    Aplikasi sedang berjalan di mode sementara (memori) — setiap edit (profil, klien, dll) akan hilang saat halaman dimuat ulang. Penyebab paling umum: koneksi database belum benar. Jika ini versi yang sudah di-deploy, pastikan env var <span style={{ fontFamily: FONT_MONO }}>APP_API_TOKEN</span> & <span style={{ fontFamily: FONT_MONO }}>NEXT_PUBLIC_API_TOKEN</span> (nilainya sama) terpasang di Vercel, lalu deploy ulang.
+                  </p>
+                  {currentUser.role === "admin" && (
+                    <button onClick={() => setView("settings")} className="mt-2 text-[11px] font-medium px-2.5 py-1 rounded-md" style={{ background: T.red, color: "#fff" }}>Lihat detail di Pengaturan</button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
           <main className="p-6 max-w-[1400px]">
             {effectiveView === "dashboard" && <DashboardView clients={visibleClients} deals={visibleDeals} activities={visibleActivities} signals={visibleSignals} bookings={visibleBookings} replies={visibleReplies} currentUser={currentUser} onOpenClient={(id) => { setSelectedClientId(id); setView("clients"); }} onOpenAi={openAi} onView={(v) => setView(v)} />}
             {effectiveView === "clients" && <ClientsView clients={visibleClients} allClients={clients} setClients={setClients} contacts={contacts} setContacts={setContacts} deals={deals} activities={activities} setActivities={setActivities} products={products} selectedId={selectedClientId} setSelectedId={setSelectedClientId} confirm={confirm} onOpenAi={openAi} currentUser={currentUser} users={users} />}
@@ -1004,7 +1035,7 @@ function Sidebar({ view, onView, onOpenAi, currentUser, onLogout, unreadReplies,
 }
 
 /* ============== TOP BAR ============== */
-function TopBar({ currentUser, onLogout, onOpenProfile }) {
+function TopBar({ currentUser, onLogout, onOpenProfile, dbStatus, saveState }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -1015,6 +1046,17 @@ function TopBar({ currentUser, onLogout, onOpenProfile }) {
     return () => document.removeEventListener("mousedown", handleClick);
   }, [menuOpen]);
 
+  let pill = null;
+  if (dbStatus === "local" || saveState === "error") {
+    pill = { color: T.red, bg: T.redSoft, icon: AlertCircle, text: "Tidak tersimpan", spin: false };
+  } else if (saveState === "saved") {
+    pill = { color: T.sage, bg: T.sageSoft, icon: CheckCircle2, text: "Tersimpan", spin: false };
+  } else if (dbStatus === "connected") {
+    pill = { color: T.inkSoft, bg: T.surfaceAlt, icon: Cloud, text: "Tersimpan otomatis", spin: false };
+  } else if (dbStatus === "checking") {
+    pill = { color: T.inkSoft, bg: T.surfaceAlt, icon: Loader2, text: "Memeriksa…", spin: true };
+  }
+
   return (
     <header className="h-14 border-b flex items-center justify-between px-6 relative" style={{ background: T.surface, borderColor: T.rule }}>
       <div className="flex items-center gap-3 flex-1 max-w-md">
@@ -1022,6 +1064,12 @@ function TopBar({ currentUser, onLogout, onOpenProfile }) {
         <input type="text" placeholder="Cari klien, kontak, deal…" className="flex-1 bg-transparent text-sm outline-none placeholder:text-gray-400" style={{ color: T.ink }} />
       </div>
       <div className="flex items-center gap-3" ref={menuRef}>
+        {pill && (
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md" style={{ background: pill.bg, border: `1px solid ${pill.color === T.inkSoft ? T.rule : pill.color}` }} title={dbStatus === "local" ? "Data tidak tersimpan ke database — mode sementara" : "Status penyimpanan"}>
+            <pill.icon size={12} style={{ color: pill.color }} className={pill.spin ? "animate-spin" : ""} />
+            <span className="text-[11px] font-medium hidden sm:inline" style={{ color: pill.color }}>{pill.text}</span>
+          </div>
+        )}
         <button className="p-2 rounded-md transition-colors hover:bg-gray-100" aria-label="Notifications">
           <Bell size={16} style={{ color: T.inkSoft }} />
         </button>
