@@ -92,23 +92,28 @@ const COMPANY_CONFIG = {
 
 /* ============== STORAGE LAYER ============== */
 const memStore = {};
+let storageBackend = null; // "remote" = window.storage (DB), "memory" = fallback sementara
+function getStorageBackend() { return storageBackend; }
 const storage = {
   async get(key) {
     try {
       if (typeof window !== "undefined" && window.storage && typeof window.storage.get === "function") {
         const result = await window.storage.get(key);
+        storageBackend = "remote";
         return result ? result.value : null;
       }
-    } catch (e) { /* fall through */ }
+    } catch (e) { storageBackend = "memory"; }
+    storageBackend = storageBackend || "memory";
     return memStore[key] || null;
   },
   async set(key, value) {
     try {
       if (typeof window !== "undefined" && window.storage && typeof window.storage.set === "function") {
         const result = await window.storage.set(key, value);
-        if (result) return true;
+        if (result) { storageBackend = "remote"; return true; }
       }
-    } catch (e) { /* fall through */ }
+    } catch (e) { storageBackend = "memory"; }
+    storageBackend = storageBackend || "memory";
     memStore[key] = value;
     return true;
   },
@@ -584,6 +589,7 @@ export default function NusaSnipe() {
   const [aiOpen, setAiOpen] = useState(false);
   const [aiContext, setAiContext] = useState(null);
   const [loaded, setLoaded] = useState(false);
+  const [dbStatus, setDbStatus] = useState("checking");
   const [pendingProposalId, setPendingProposalId] = useState(null);
   const { confirm, Dialog: ConfirmDialog } = useConfirm();
 
@@ -653,6 +659,16 @@ export default function NusaSnipe() {
       if (!tg) await storage.set(STORAGE_KEYS.targets, JSON.stringify([]));
       if (!ld) await storage.set(STORAGE_KEYS.leads, JSON.stringify([]));
       if (!pd) await storage.set(STORAGE_KEYS.products, JSON.stringify(SEED_PRODUCTS));
+
+      // Healthcheck: konfirmasi apakah penyimpanan benar-benar tersambung (DB) atau hanya memori sementara
+      try {
+        const probe = "ok-" + Date.now();
+        await storage.set("snipe:__healthcheck", probe);
+        const back = await storage.get("snipe:__healthcheck");
+        setDbStatus(getStorageBackend() === "remote" && back === probe ? "connected" : "local");
+      } catch (e) {
+        setDbStatus("local");
+      }
 
       setLoaded(true);
       setAuthChecked(true);
@@ -807,6 +823,47 @@ export default function NusaSnipe() {
     setView("dashboard");
   }, [confirm]);
 
+  const handleExportData = useCallback(() => {
+    const payload = {
+      app: "Nusa Snipe", version: APP_VERSION, exportedAt: new Date().toISOString(),
+      data: {
+        company, users, clients, contacts, deals, activities, templates, campaigns,
+        meetingTypes, bookings, signals, replies, proposals, targets, leads, products,
+      },
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `nusa-snipe-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [company, users, clients, contacts, deals, activities, templates, campaigns, meetingTypes, bookings, signals, replies, proposals, targets, leads, products]);
+
+  const handleImportData = useCallback(async (payload) => {
+    const d = payload && payload.data ? payload.data : payload;
+    if (!d || typeof d !== "object") throw new Error("File backup tidak valid.");
+    const ok = await confirm("Pulihkan data dari file backup? Ini akan MENGGANTI seluruh data saat ini (klien, lead, pengguna, perusahaan, dll). Pastikan Anda sudah mengekspor data yang sekarang bila perlu.");
+    if (!ok) return false;
+    if (Array.isArray(d.users) && d.users.length > 0) setUsers(d.users);
+    if (d.company && typeof d.company === "object") { Object.assign(COMPANY_CONFIG, d.company); setCompany({ ...COMPANY_CONFIG, ...d.company }); }
+    if (Array.isArray(d.clients)) setClients(d.clients);
+    if (Array.isArray(d.contacts)) setContacts(d.contacts);
+    if (Array.isArray(d.deals)) setDeals(d.deals);
+    if (Array.isArray(d.activities)) setActivities(d.activities);
+    if (Array.isArray(d.templates)) setTemplates(d.templates);
+    if (Array.isArray(d.campaigns)) setCampaigns(d.campaigns);
+    if (Array.isArray(d.meetingTypes)) setMeetingTypes(d.meetingTypes);
+    if (Array.isArray(d.bookings)) setBookings(d.bookings);
+    if (Array.isArray(d.signals)) setSignals(d.signals);
+    if (Array.isArray(d.replies)) setReplies(d.replies);
+    if (Array.isArray(d.proposals)) setProposals(d.proposals);
+    if (Array.isArray(d.targets)) setTargets(d.targets);
+    if (Array.isArray(d.leads)) setLeads(d.leads);
+    if (Array.isArray(d.products)) setProducts(d.products);
+    return true;
+  }, [confirm]);
+
   if (!authChecked) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ ...canvasBg }}>
@@ -836,7 +893,7 @@ export default function NusaSnipe() {
             {effectiveView === "pipeline" && <PipelineView deals={visibleDeals} allDeals={deals} setDeals={setDeals} clients={visibleClients} currentUser={currentUser} users={users} onOpenClient={(id) => { setSelectedClientId(id); setView("clients"); }} />}
             {effectiveView === "forecast" && <ForecastView deals={visibleDeals} proposals={visibleProposals} targets={targets} setTargets={setTargets} clients={visibleClients} currentUser={currentUser} users={users} />}
             {effectiveView === "products" && <ProductsView products={products} setProducts={setProducts} clients={visibleClients} confirm={confirm} currentUser={currentUser} />}
-            {effectiveView === "leads" && <LeadsView leads={visibleLeads} setLeads={setLeads} clients={clients} setClients={setClients} setDeals={setDeals} currentUser={currentUser} users={users} confirm={confirm} onOpenClient={(id) => { setSelectedClientId(id); setView("clients"); }} onOpenAi={openAi} />}
+            {effectiveView === "leads" && <LeadsView leads={visibleLeads} setLeads={setLeads} clients={clients} setClients={setClients} setDeals={setDeals} products={products} currentUser={currentUser} users={users} confirm={confirm} onOpenClient={(id) => { setSelectedClientId(id); setView("clients"); }} onOpenAi={openAi} />}
             {effectiveView === "proposals" && <ProposalsView proposals={visibleProposals} setProposals={setProposals} clients={visibleClients} setClients={setClients} deals={visibleDeals} contacts={contacts} setContacts={setContacts} confirm={confirm} currentUser={currentUser} users={users} onOpenClient={(id) => { setSelectedClientId(id); setView("clients"); }} onOpenAi={openAi} openProposalId={pendingProposalId} onProposalOpened={() => setPendingProposalId(null)} />}
             {effectiveView === "billing" && <BillingView proposals={visibleProposals} clients={visibleClients} currentUser={currentUser} onOpenProposal={(id) => { setPendingProposalId(id); setView("proposals"); }} onOpenClient={(id) => { setSelectedClientId(id); setView("clients"); }} />}
             {effectiveView === "reports" && <ReportsView proposals={visibleProposals} clients={visibleClients} deals={visibleDeals} signals={visibleSignals} bookings={visibleBookings} campaigns={visibleCampaigns} replies={visibleReplies} users={users} currentUser={currentUser} />}
@@ -848,7 +905,7 @@ export default function NusaSnipe() {
             {effectiveView === "users" && currentUser.role === "admin" && <UsersView users={users} setUsers={setUsers} currentUser={currentUser} confirm={confirm} clients={clients} deals={deals} onUpdateSelf={handleUpdateProfile} />}
             {effectiveView === "company" && currentUser.role === "admin" && <CompanyView company={company} setCompany={setCompany} canEdit={currentUser.role === "admin"} />}
             {effectiveView === "profile" && <ProfileView currentUser={currentUser} onSave={handleUpdateProfile} />}
-            {effectiveView === "settings" && <SettingsView currentUser={currentUser} company={company} onOpenCompany={() => setView("company")} onOpenProfile={() => setView("profile")} />}
+            {effectiveView === "settings" && <SettingsView currentUser={currentUser} company={company} dbStatus={dbStatus} onOpenCompany={() => setView("company")} onOpenProfile={() => setView("profile")} onExportData={handleExportData} onImportData={handleImportData} />}
             {effectiveView === "about" && <AboutView />}
           </main>
         </div>
@@ -1246,14 +1303,9 @@ function ClientsView({ clients, allClients, setClients, contacts, setContacts, d
           <h1 className="text-[26px] font-semibold tracking-tight" style={{ color: T.ink }}>Klien</h1>
           <p className="text-sm mt-1" style={{ color: T.inkSoft }}>{clients.length} klien {currentUser.role === "sales" ? "milik Anda" : "terdaftar"} · <span style={{ color: T.sage, fontWeight: 500 }}>{clients.filter((c) => (c.clientType || "potential") === "existing").length} existing</span>, {clients.filter((c) => (c.clientType || "potential") === "potential").length} potensial</p>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setShowImport(true)} className="px-4 py-2 rounded-md text-sm font-medium flex items-center gap-2" style={{ background: T.surface, color: T.navy, border: `1px solid ${T.rule}` }}>
-            <FileSpreadsheet size={14} /> Import Excel
-          </button>
-          <button onClick={() => setShowAddModal(true)} className="px-4 py-2 rounded-md text-white text-sm font-medium flex items-center gap-2" style={{ background: T.navy }}>
-            <Plus size={14} /> Tambah klien
-          </button>
-        </div>
+        <button onClick={() => setShowAddModal(true)} className="px-4 py-2 rounded-md text-white text-sm font-medium flex items-center gap-2" style={{ background: T.navy }}>
+          <Plus size={14} /> Tambah klien
+        </button>
       </div>
 
       <div className="flex items-center gap-3 mb-4 flex-wrap">
@@ -1298,7 +1350,6 @@ function ClientsView({ clients, allClients, setClients, contacts, setContacts, d
       )}
 
       {(showAddModal || editingClient) && <ClientModal client={editingClient} products={products} onSave={handleSave} onClose={() => { setShowAddModal(false); setEditingClient(null); }} currentUser={currentUser} users={users} />}
-      {showImport && <ClientImportModal products={products} onImport={handleImport} onClose={() => setShowImport(false)} />}
     </div>
   );
 }
@@ -2150,7 +2201,24 @@ function ChatMessage({ role, content }) {
 }
 
 /* ============== SETTINGS VIEW ============== */
-function SettingsView({ currentUser, company, onOpenCompany, onOpenProfile }) {
+function SettingsView({ currentUser, company, dbStatus, onOpenCompany, onOpenProfile, onExportData, onImportData }) {
+  const importRef = useRef(null);
+  const [importMsg, setImportMsg] = useState(null);
+  const handleImportFile = (file) => {
+    setImportMsg(null);
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const payload = JSON.parse(e.target.result);
+        const done = await onImportData(payload);
+        if (done) setImportMsg({ ok: true, text: "Data berhasil dipulihkan dari backup." });
+      } catch (err) {
+        setImportMsg({ ok: false, text: "Gagal memulihkan: " + ((err && err.message) || "file tidak valid") });
+      }
+    };
+    reader.onerror = () => setImportMsg({ ok: false, text: "Gagal membaca file." });
+    reader.readAsText(file);
+  };
   return (
     <div>
       <div className="mb-6">
@@ -2214,6 +2282,55 @@ function SettingsView({ currentUser, company, onOpenCompany, onOpenProfile }) {
               <strong>Untuk produksi:</strong> buat route <span style={{ fontFamily: FONT_MONO }}>/api/send-email</span> (API key & kredensial disimpan sebagai environment variable di server, TIDAK di browser). Sequence kampanye otomatis butuh tambahan Vercel Cron sebagai penjadwal. Lampiran media (gambar/banner) baru benar-benar terkirim lewat Gmail API atau ESP — mailto/wa.me tidak mendukung lampiran langsung.
             </p>
           </div>
+        </Panel>
+        <Panel title="Backup & Pemulihan Data" icon={Download} accent={T.sage} className="col-span-2">
+          {dbStatus === "connected" && (
+            <div className="rounded-md p-3 mb-3 flex items-start gap-2" style={{ background: T.sageSoft, border: `1px solid ${T.sage}` }}>
+              <CheckCircle2 size={15} style={{ color: T.sage }} className="flex-shrink-0 mt-0.5" />
+              <p className="text-[11px] leading-relaxed" style={{ color: T.sage }}>
+                <strong>Terhubung ke database.</strong> Data Anda tersimpan permanen dan <strong>tidak hilang saat aplikasi di-update</strong> — kode & database terpisah.
+              </p>
+            </div>
+          )}
+          {dbStatus === "local" && (
+            <div className="rounded-md p-3 mb-3 flex items-start gap-2" style={{ background: T.redSoft, border: `1px solid ${T.red}` }}>
+              <AlertCircle size={15} style={{ color: T.red }} className="flex-shrink-0 mt-0.5" />
+              <p className="text-[11px] leading-relaxed" style={{ color: T.red }}>
+                <strong>Mode sementara (memori lokal).</strong> Data BELUM tersimpan ke database dan akan hilang saat halaman dimuat ulang. Jika ini versi yang sudah di-deploy, koneksi Upstash kemungkinan belum benar — periksa 4 environment variable di Vercel (<span style={{ fontFamily: FONT_MONO }}>KV_REST_API_URL</span>, <span style={{ fontFamily: FONT_MONO }}>KV_REST_API_TOKEN</span>, <span style={{ fontFamily: FONT_MONO }}>APP_API_TOKEN</span>, <span style={{ fontFamily: FONT_MONO }}>NEXT_PUBLIC_API_TOKEN</span>) lalu deploy ulang.
+              </p>
+            </div>
+          )}
+          {dbStatus === "checking" && (
+            <div className="rounded-md p-3 mb-3 flex items-center gap-2" style={{ background: T.surfaceAlt, border: `1px solid ${T.rule}` }}>
+              <Loader2 size={14} style={{ color: T.inkSoft }} className="animate-spin" />
+              <p className="text-[11px]" style={{ color: T.inkSoft }}>Memeriksa koneksi database…</p>
+            </div>
+          )}
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex-1 min-w-[260px]">
+              <p className="text-[13px] font-medium mb-1" style={{ color: T.ink }}>Ekspor seluruh data ke file</p>
+              <p className="text-[11px] leading-relaxed" style={{ color: T.inkSoft }}>Unduh 1 file backup (.json) berisi profil perusahaan, pengguna, klien, lead, produk, deal, proposal — semuanya. Simpan sebagai cadangan.</p>
+            </div>
+            <button onClick={onExportData} className="px-4 py-2.5 rounded-md text-sm text-white flex items-center gap-1.5 flex-shrink-0" style={{ background: T.sage }}>
+              <Download size={14} /> Ekspor data (backup)
+            </button>
+          </div>
+          <div className="flex items-center justify-between gap-4 flex-wrap mt-3 pt-3 border-t" style={{ borderColor: T.ruleSoft }}>
+            <div className="flex-1 min-w-[260px]">
+              <p className="text-[13px] font-medium mb-1" style={{ color: T.ink }}>Pulihkan data dari file</p>
+              <p className="text-[11px] leading-relaxed" style={{ color: T.inkSoft }}>Unggah file backup (.json) untuk memulihkan. <strong style={{ color: T.amber }}>Mengganti</strong> seluruh data saat ini — ekspor dulu bila perlu.</p>
+            </div>
+            <input ref={importRef} type="file" accept=".json,application/json" onChange={(e) => { if (e.target.files && e.target.files[0]) handleImportFile(e.target.files[0]); e.target.value = ""; }} style={{ display: "none" }} />
+            <button onClick={() => importRef.current && importRef.current.click()} className="px-4 py-2.5 rounded-md text-sm flex items-center gap-1.5 flex-shrink-0" style={{ background: T.surface, color: T.navy, border: `1px solid ${T.rule}` }}>
+              <Upload size={14} /> Pulihkan dari backup
+            </button>
+          </div>
+          {importMsg && (
+            <div className="rounded-md p-2.5 mt-3 flex items-center gap-2" style={{ background: importMsg.ok ? T.sageSoft : T.redSoft, border: `1px solid ${importMsg.ok ? T.sage : T.red}` }}>
+              {importMsg.ok ? <CheckCircle2 size={13} style={{ color: T.sage }} /> : <AlertCircle size={13} style={{ color: T.red }} />}
+              <p className="text-[11px]" style={{ color: importMsg.ok ? T.sage : T.red }}>{importMsg.text}</p>
+            </div>
+          )}
         </Panel>
       </div>
     </div>
@@ -8399,10 +8516,11 @@ const LEAD_STATUS_CONF = {
 const LEAD_INDUSTRIES = ["Pertambangan", "Migas / Energi", "Manufaktur", "Konstruksi", "Petrokimia", "Pembangkit Listrik", "Logistik & Transportasi", "Lainnya"];
 const LEAD_SERVICES = ["SMK3 (PP 50/2012)", "ISO 45001", "ISO 14001", "ISO 9001", "Fire Protection", "HAZID / HAZOP", "Training K3", "Audit & Inspeksi"];
 
-function LeadsView({ leads, setLeads, clients, setClients, setDeals, currentUser, users, confirm, onOpenClient, onOpenAi }) {
+function LeadsView({ leads, setLeads, clients, setClients, setDeals, products, currentUser, users, confirm, onOpenClient, onOpenAi }) {
   const [tab, setTab] = useState("inbox");
   const [filterStatus, setFilterStatus] = useState("all");
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [editingLead, setEditingLead] = useState(null);
   const [convertingLead, setConvertingLead] = useState(null);
 
@@ -8435,6 +8553,14 @@ function LeadsView({ leads, setLeads, clients, setClients, setDeals, currentUser
     setTab("inbox"); setFilterStatus("all");
   };
 
+  const handleImportLeads = (rows) => {
+    const now = Date.now();
+    const newLeads = rows.map((r, i) => ({ ...r, id: newId("lead"), status: r.status || "new", ownerId: currentUser.id, createdAt: new Date(now - i).toISOString(), interestedProducts: r.interestedProducts || [] }));
+    setLeads((prev) => [...newLeads, ...prev]);
+    setShowImport(false);
+    setTab("inbox"); setFilterStatus("all");
+  };
+
   const handleStatus = (id, status) => setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, status } : l)));
 
   const handleDelete = async (id) => {
@@ -8464,12 +8590,17 @@ function LeadsView({ leads, setLeads, clients, setClients, setDeals, currentUser
             <UserPlus size={22} style={{ color: T.sage }} />
             <h1 className="text-[26px] font-semibold tracking-tight" style={{ color: T.ink }}>Lead Capture</h1>
           </div>
-          <p className="text-sm" style={{ color: T.inkSoft }}>Tangkap lead dari form website, kelola, dan konversi jadi klien</p>
+          <p className="text-sm" style={{ color: T.inkSoft }}>Kumpulan calon klien (import Excel & form website). Tarik jadi klien saat sudah ada minat produk & PO.</p>
         </div>
         {tab === "inbox" && (
-          <button onClick={() => setShowAddModal(true)} className="px-4 py-2 rounded-md text-white text-sm font-medium flex items-center gap-2" style={{ background: T.navy }}>
-            <Plus size={14} /> Tambah lead manual
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowImport(true)} className="px-4 py-2 rounded-md text-sm font-medium flex items-center gap-2" style={{ background: T.surface, color: T.navy, border: `1px solid ${T.rule}` }}>
+              <FileSpreadsheet size={14} /> Import Excel
+            </button>
+            <button onClick={() => setShowAddModal(true)} className="px-4 py-2 rounded-md text-white text-sm font-medium flex items-center gap-2" style={{ background: T.navy }}>
+              <Plus size={14} /> Tambah lead manual
+            </button>
+          </div>
         )}
       </div>
 
@@ -8504,7 +8635,7 @@ function LeadsView({ leads, setLeads, clients, setClients, setDeals, currentUser
             <div className="py-16 text-center rounded-xl" style={{ background: T.surface, border: `1px dashed ${T.rule}` }}>
               <UserPlus size={28} style={{ color: T.inkFaint }} className="mx-auto mb-3" />
               <p className="text-sm font-medium mb-1" style={{ color: T.ink }}>Belum ada lead</p>
-              <p className="text-xs" style={{ color: T.inkSoft }}>Bagikan form di tab "Form & Embed", atau tambah lead manual</p>
+              <p className="text-xs" style={{ color: T.inkSoft }}>Import calon klien dari Excel, bagikan form di tab "Form & Embed", atau tambah manual</p>
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3">
@@ -8513,6 +8644,7 @@ function LeadsView({ leads, setLeads, clients, setClients, setDeals, currentUser
                   key={l.id}
                   lead={l}
                   owner={users.find((u) => u.id === l.ownerId)}
+                  products={products}
                   showOwner={currentUser.role === "admin"}
                   onStatus={(s) => handleStatus(l.id, s)}
                   onConvert={() => setConvertingLead(l)}
@@ -8531,14 +8663,16 @@ function LeadsView({ leads, setLeads, clients, setClients, setDeals, currentUser
         <LeadFormEmbed onCapture={handleCaptureFromForm} />
       )}
 
-      {(showAddModal || editingLead) && <LeadModal lead={editingLead} users={users} currentUser={currentUser} onSave={handleSaveLead} onClose={() => { setShowAddModal(false); setEditingLead(null); }} />}
-      {convertingLead && <ConvertLeadModal lead={convertingLead} onConvert={handleConvert} onClose={() => setConvertingLead(null)} />}
+      {(showAddModal || editingLead) && <LeadModal lead={editingLead} users={users} products={products} currentUser={currentUser} onSave={handleSaveLead} onClose={() => { setShowAddModal(false); setEditingLead(null); }} />}
+      {convertingLead && <ConvertLeadModal lead={convertingLead} products={products} onConvert={handleConvert} onClose={() => setConvertingLead(null)} />}
+      {showImport && <LeadImportModal products={products} onImport={handleImportLeads} onClose={() => setShowImport(false)} />}
     </div>
   );
 }
 
-function LeadCard({ lead, owner, showOwner, onStatus, onConvert, onEdit, onDelete, onAi, onOpenConverted }) {
+function LeadCard({ lead, owner, products, showOwner, onStatus, onConvert, onEdit, onDelete, onAi, onOpenConverted }) {
   const sc = LEAD_STATUS_CONF[lead.status] || LEAD_STATUS_CONF.new;
+  const interested = (lead.interestedProducts || []).map((pid) => (products || []).find((p) => p.id === pid)).filter(Boolean);
   return (
     <div className="rounded-xl p-4 group" style={{ background: T.surface, border: `1px solid ${T.rule}` }}>
       <div className="flex items-start gap-3 mb-3">
@@ -8564,6 +8698,13 @@ function LeadCard({ lead, owner, showOwner, onStatus, onConvert, onEdit, onDelet
         <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: T.surfaceAlt, color: T.inkSoft }}>{lead.source}</span>
         {showOwner && owner && <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: T.navySoft, color: T.navy }}>{owner.name}</span>}
       </div>
+      {interested.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1 mb-3">
+          <span className="text-[9px] uppercase tracking-wider" style={{ color: T.inkFaint, fontFamily: FONT_MONO }}><Tag size={9} className="inline" /> Minat:</span>
+          {interested.slice(0, 2).map((p) => <span key={p.id} className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: T.navySoft, color: T.navy }}>{p.name.length > 20 ? p.name.slice(0, 20) + "…" : p.name}</span>)}
+          {interested.length > 2 && <span className="text-[10px]" style={{ color: T.inkFaint }}>+{interested.length - 2}</span>}
+        </div>
+      )}
       <div className="flex items-center justify-between pt-3 border-t" style={{ borderColor: T.ruleSoft }}>
         <div className="flex items-center gap-1">
           <button onClick={onAi} className="text-[11px] flex items-center gap-1 px-2 py-1 rounded-md" style={{ background: T.navySoft, color: T.navy }}>
@@ -8596,8 +8737,8 @@ function LeadCard({ lead, owner, showOwner, onStatus, onConvert, onEdit, onDelet
   );
 }
 
-function LeadModal({ lead, users, currentUser, onSave, onClose }) {
-  const [form, setForm] = useState(lead || { companyName: "", contactName: "", email: "", phone: "", industry: "", message: "", source: "Manual", status: "new", ownerId: currentUser.id });
+function LeadModal({ lead, users, products, currentUser, onSave, onClose }) {
+  const [form, setForm] = useState(lead || { companyName: "", contactName: "", email: "", phone: "", industry: "", message: "", source: "Manual", status: "new", interestedProducts: [], ownerId: currentUser.id });
   const isAdmin = currentUser.role === "admin";
   return (
     <Modal onClose={onClose} maxWidth="max-w-xl">
@@ -8637,6 +8778,22 @@ function LeadModal({ lead, users, currentUser, onSave, onClose }) {
         <FormField label="Kebutuhan / pesan">
           <textarea value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} rows={3} style={{ ...inputStyle, resize: "vertical", minHeight: "80px" }} placeholder="Layanan yang dibutuhkan, konteks, dll." />
         </FormField>
+        <FormField label="Produk yang diminati">
+          {(products || []).filter((p) => p.active !== false).length === 0 ? (
+            <p className="text-[11px] py-2 px-3 rounded-md" style={{ color: T.inkFaint, background: T.surfaceAlt }}>Belum ada produk di katalog.</p>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {(products || []).filter((p) => p.active !== false).map((p) => {
+                const sel = (form.interestedProducts || []).includes(p.id);
+                return (
+                  <button key={p.id} type="button" onClick={() => setForm({ ...form, interestedProducts: sel ? form.interestedProducts.filter((x) => x !== p.id) : [...(form.interestedProducts || []), p.id] })} className="text-[11px] px-2.5 py-1.5 rounded-md flex items-center gap-1 transition-all" style={{ background: sel ? T.navy : T.surfaceAlt, color: sel ? "#fff" : T.inkSoft, border: `1px solid ${sel ? T.navy : T.rule}` }}>
+                    {sel && <CheckCircle2 size={11} />}{p.name.length > 30 ? p.name.slice(0, 30) + "…" : p.name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </FormField>
       </div>
       <div className="p-5 border-t flex justify-end gap-2" style={{ borderColor: T.rule }}>
         <button onClick={onClose} className="px-4 py-2 rounded-md text-sm" style={{ color: T.inkSoft }}>Batal</button>
@@ -8648,12 +8805,13 @@ function LeadModal({ lead, users, currentUser, onSave, onClose }) {
   );
 }
 
-function ConvertLeadModal({ lead, onConvert, onClose }) {
+function ConvertLeadModal({ lead, products, onConvert, onClose }) {
   const [form, setForm] = useState({
     name: lead.companyName || lead.contactName || "",
     industry: lead.industry || "",
     country: "Indonesia", city: "", website: "", employees: "100-500",
     tags: ["From Lead"], health: "warm", source: "Lead Capture",
+    clientType: "existing", interestedProducts: lead.interestedProducts || [],
     notes: `Dari Lead Capture (${lead.source}):\nKontak: ${lead.contactName || "-"}${lead.email ? " · " + lead.email : ""}${lead.phone ? " · " + lead.phone : ""}\n\nKebutuhan: ${lead.message || "-"}`,
   });
   const [makeDeal, setMakeDeal] = useState(false);
@@ -8690,10 +8848,27 @@ function ConvertLeadModal({ lead, onConvert, onClose }) {
         <FormField label="Catatan (dari lead)">
           <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={4} style={{ ...inputStyle, resize: "vertical", minHeight: "100px", fontSize: "12px" }} />
         </FormField>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input type="checkbox" checked={makeDeal} onChange={(e) => setMakeDeal(e.target.checked)} />
-          <span className="text-[13px]" style={{ color: T.ink }}>Sekaligus buat deal di pipeline</span>
-        </label>
+        {(products || []).filter((p) => p.active !== false).length > 0 && (
+          <FormField label="Produk yang diminati (dibawa ke data klien)">
+            <div className="flex flex-wrap gap-1.5">
+              {(products || []).filter((p) => p.active !== false).map((p) => {
+                const sel = (form.interestedProducts || []).includes(p.id);
+                return (
+                  <button key={p.id} type="button" onClick={() => setForm({ ...form, interestedProducts: sel ? form.interestedProducts.filter((x) => x !== p.id) : [...(form.interestedProducts || []), p.id] })} className="text-[11px] px-2.5 py-1.5 rounded-md flex items-center gap-1 transition-all" style={{ background: sel ? T.navy : T.surfaceAlt, color: sel ? "#fff" : T.inkSoft, border: `1px solid ${sel ? T.navy : T.rule}` }}>
+                    {sel && <CheckCircle2 size={11} />}{p.name.length > 28 ? p.name.slice(0, 28) + "…" : p.name}
+                  </button>
+                );
+              })}
+            </div>
+          </FormField>
+        )}
+        <div className="rounded-md p-3" style={{ background: T.sageSoft, border: `1px solid ${T.sage}` }}>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={makeDeal} onChange={(e) => setMakeDeal(e.target.checked)} />
+            <span className="text-[13px] font-medium" style={{ color: T.sage }}>Sudah ada PO / jadi proyek — buat deal di pipeline</span>
+          </label>
+          <p className="text-[10px] mt-1 ml-6" style={{ color: T.inkSoft }}>Centang bila lead ini sudah menghasilkan PO/komitmen proyek, agar langsung tercatat sebagai deal.</p>
+        </div>
         {makeDeal && (
           <div className="rounded-md p-3 space-y-3" style={{ background: T.surfaceAlt, border: `1px solid ${T.rule}` }}>
             <FormField label="Judul deal"><input type="text" value={deal.title} onChange={(e) => setDeal({ ...deal, title: e.target.value })} style={inputStyle} /></FormField>
@@ -9198,8 +9373,9 @@ function SendEmailModal({ initial, clients, contacts, products, currentUser, ema
 /* ============================================================================
    APP VERSION + CHANGELOG (About)
    ============================================================================ */
-const APP_VERSION = "1.9.0";
+const APP_VERSION = "2.0.0";
 const VERSION_HISTORY = [
+  { version: "2.0.0", date: "Juni 2026", title: "Alur Lead → Klien & Backup data", items: ["Import calon klien (Excel) kini masuk ke Lead Capture, bukan langsung ke Klien", "Lead bisa ditandai produk yang diminati, lalu ditarik jadi Klien saat ada PO/proyek", "Daftar Klien jadi lebih fokus pada yang benar-benar potensial & berjalan", "Backup & Pemulihan data (ekspor/impor 1 file) di Pengaturan", "Penjelasan: data di versi deploy tidak hilang saat update aplikasi"] },
   { version: "1.9.0", date: "Juni 2026", title: "Tampilan baru: biru langit & earthy", items: ["Palet warna profesional baru — biru langit yang menenangkan + aksen earthy (sage, coklat muda, terakota)", "Tekstur latar halus (dot-grid + glow lembut) yang nyaman dipakai seharian", "Font Inter yang profesional dengan ukuran proporsional", "Warna mencolok dihilangkan, diganti nuansa pastel yang kalem", "Dokumen proposal & laporan ikut diselaraskan dengan tema baru"] },
   { version: "1.8.0", date: "Juni 2026", title: "Produk, Import Excel & klien existing", items: ["Katalog Produk & Jasa dengan kalkulator harga berbasis parameter", "Import data klien massal via file Excel (+ template siap pakai)", "Label klien Existing vs Potensial + produk yang diminati per klien", "Halaman About dengan riwayat versi", "Rebrand \"AI Copilot\" menjadi \"AI Assistant\" di seluruh aplikasi", "Pembersihan menu Pengaturan"] },
   { version: "1.7.0", date: "Juni 2026", title: "Kirim email langsung dari Outreach", items: ["Integrasi pengiriman email (SMTP/Gmail) langsung dari aplikasi", "Generator copy marketing dengan AI (email & WhatsApp)", "Lampiran gambar/banner promosi di template & kampanye"] },
@@ -9690,6 +9866,136 @@ function ClientImportModal({ products, onImport, onClose }) {
         <button onClick={onClose} className="px-4 py-2 rounded-md text-sm" style={{ color: T.inkSoft }}>Batal</button>
         <button onClick={() => parsed && onImport(parsed)} disabled={!parsed} className="px-4 py-2 rounded-md text-sm text-white flex items-center gap-1.5" style={{ background: T.sage, opacity: parsed ? 1 : 0.5 }}>
           <Upload size={13} /> Import {parsed ? `${parsed.length} klien` : ""}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+/* ============================================================================
+   LEAD EXCEL IMPORT (v2.0) — calon klien masuk ke Lead Capture
+   ============================================================================ */
+const LEAD_IMPORT_HEADERS = ["Nama Perusahaan", "Nama Kontak", "Email", "No. HP / WA", "Industri", "Sumber", "Status (new/contacted/qualified)", "Produk Diminati (pisah koma)", "Kebutuhan / Pesan"];
+
+function downloadLeadTemplate(products) {
+  const sample = (products && products[0]) ? products[0].name : "Sertifikasi SMK3 (PP 50/2012)";
+  const example = [
+    ["PT Calon Klien Satu", "Budi Santoso", "budi@calonklien1.co.id", "+62 812 0000 0001", "Manufaktur - Baja", "Pameran K3", "new", sample, "Tertarik audit SMK3 untuk pabrik baru di Cilegon."],
+    ["PT Calon Klien Dua", "Siti Aminah", "siti@calonklien2.com", "+62 813 0000 0002", "Pertambangan - Batubara", "Referensi", "contacted", sample, "Butuh penawaran ISO 45001 + training."],
+  ];
+  const ws = XLSX.utils.aoa_to_sheet([LEAD_IMPORT_HEADERS, ...example]);
+  ws["!cols"] = LEAD_IMPORT_HEADERS.map((h) => ({ wch: Math.max(16, h.length + 2) }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Calon Klien");
+  XLSX.writeFile(wb, "Template_Import_Lead_NusaSnipe.xlsx");
+}
+
+function parseLeadRows(rows, products) {
+  const out = [];
+  (rows || []).forEach((row) => {
+    const companyName = pickCol(row, ["nama perusahaan", "perusahaan"]);
+    const contactName = pickCol(row, ["nama kontak", "kontak", "pic"]);
+    if (!companyName && !contactName) return;
+    let status = pickCol(row, ["status"]).toLowerCase();
+    if (["new", "contacted", "qualified", "archived"].indexOf(status) === -1) status = "new";
+    const prodNames = pickCol(row, ["produk"]).split(",").map((t) => t.trim().toLowerCase()).filter(Boolean);
+    const interestedProducts = [];
+    prodNames.forEach((pn) => {
+      const match = (products || []).find((p) => p.name.toLowerCase().indexOf(pn) !== -1 || pn.indexOf(p.name.toLowerCase()) !== -1);
+      if (match && interestedProducts.indexOf(match.id) === -1) interestedProducts.push(match.id);
+    });
+    out.push({
+      companyName, contactName,
+      email: pickCol(row, ["email", "e-mail"]),
+      phone: pickCol(row, ["hp", "wa", "telp", "phone", "telepon"]),
+      industry: pickCol(row, ["industri"]),
+      source: pickCol(row, ["sumber", "source"]) || "Import Excel",
+      status, interestedProducts,
+      message: pickCol(row, ["kebutuhan", "pesan", "catatan", "message"]),
+    });
+  });
+  return out;
+}
+
+function LeadImportModal({ products, onImport, onClose }) {
+  const fileRef = useRef(null);
+  const [parsed, setParsed] = useState(null);
+  const [error, setError] = useState(null);
+  const [fileName, setFileName] = useState("");
+
+  const handleFile = (file) => {
+    setError(null); setParsed(null); setFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const wb = XLSX.read(new Uint8Array(e.target.result), { type: "array" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
+        const leads = parseLeadRows(rows, products);
+        if (leads.length === 0) { setError("Tidak ada baris valid (isi minimal 'Nama Perusahaan' atau 'Nama Kontak')."); return; }
+        setParsed(leads);
+      } catch (err) {
+        setError("Gagal membaca file: " + ((err && err.message) || "format tidak didukung"));
+      }
+    };
+    reader.onerror = () => setError("Gagal membaca file.");
+    reader.readAsArrayBuffer(file);
+  };
+
+  return (
+    <Modal onClose={onClose} maxWidth="max-w-2xl">
+      <div className="p-5 border-b flex items-center justify-between" style={{ borderColor: T.rule }}>
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-md flex items-center justify-center" style={{ background: T.sageSoft }}><FileSpreadsheet size={15} style={{ color: T.sage }} /></div>
+          <div>
+            <h2 className="text-[16px] font-semibold" style={{ color: T.ink }}>Import calon klien (Lead) dari Excel</h2>
+            <p className="text-[11px]" style={{ color: T.inkSoft }}>Daftar masuk ke Lead Capture, bukan langsung ke Klien</p>
+          </div>
+        </div>
+        <button onClick={onClose} aria-label="Close"><X size={18} style={{ color: T.inkSoft }} /></button>
+      </div>
+      <div className="p-5 space-y-4">
+        <div className="rounded-md p-3.5" style={{ background: T.navySoft, border: `1px solid ${T.navy}` }}>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex-1 min-w-[220px]">
+              <p className="text-[12px] font-medium mb-0.5" style={{ color: T.navy }}>Langkah 1 — Unduh template</p>
+              <p className="text-[11px] leading-relaxed" style={{ color: T.navy }}>Format kolom sudah disiapkan (termasuk produk yang diminati). Ada 2 baris contoh.</p>
+            </div>
+            <button onClick={() => downloadLeadTemplate(products)} className="px-3.5 py-2 rounded-md text-[12px] flex items-center gap-1.5 flex-shrink-0" style={{ background: T.navy, color: "#fff" }}>
+              <Download size={13} /> Unduh template Excel
+            </button>
+          </div>
+        </div>
+        <div>
+          <p className="text-[12px] font-medium mb-2" style={{ color: T.ink }}>Langkah 2 — Unggah file terisi</p>
+          <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={(e) => { if (e.target.files && e.target.files[0]) handleFile(e.target.files[0]); }} style={{ display: "none" }} />
+          <button onClick={() => fileRef.current && fileRef.current.click()} className="w-full py-6 rounded-lg flex flex-col items-center justify-center gap-2" style={{ background: T.surfaceAlt, border: `1.5px dashed ${T.rule}`, color: T.inkSoft }}>
+            <Upload size={22} />
+            <span className="text-[12px] font-medium">{fileName || "Klik untuk pilih file Excel (.xlsx)"}</span>
+          </button>
+        </div>
+        {error && (
+          <div className="rounded-md p-3 flex items-start gap-2" style={{ background: T.redSoft, border: `1px solid ${T.red}` }}>
+            <AlertCircle size={14} style={{ color: T.red }} className="flex-shrink-0 mt-0.5" />
+            <p className="text-[12px]" style={{ color: T.red }}>{error}</p>
+          </div>
+        )}
+        {parsed && (
+          <div className="rounded-md p-3.5" style={{ background: T.sageSoft, border: `1px solid ${T.sage}` }}>
+            <p className="text-[12px] font-medium mb-2 flex items-center gap-1.5" style={{ color: T.sage }}><CheckCircle2 size={14} /> {parsed.length} calon klien siap masuk ke Lead Capture</p>
+            <div className="max-h-32 overflow-y-auto space-y-1">
+              {parsed.slice(0, 30).map((l, i) => (
+                <div key={i} className="text-[11px] truncate" style={{ color: T.ink }}>{l.companyName || l.contactName} <span style={{ color: T.inkFaint }}>· {l.industry || "—"}{l.interestedProducts.length ? ` · ${l.interestedProducts.length} produk diminati` : ""}</span></div>
+              ))}
+              {parsed.length > 30 && <p className="text-[10px]" style={{ color: T.inkFaint }}>…dan {parsed.length - 30} lainnya</p>}
+            </div>
+          </div>
+        )}
+      </div>
+      <div className="p-5 border-t flex justify-end gap-2" style={{ borderColor: T.rule }}>
+        <button onClick={onClose} className="px-4 py-2 rounded-md text-sm" style={{ color: T.inkSoft }}>Batal</button>
+        <button onClick={() => parsed && onImport(parsed)} disabled={!parsed} className="px-4 py-2 rounded-md text-sm text-white flex items-center gap-1.5" style={{ background: T.sage, opacity: parsed ? 1 : 0.5 }}>
+          <Upload size={13} /> Import {parsed ? `${parsed.length} lead` : ""}
         </button>
       </div>
     </Modal>
