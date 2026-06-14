@@ -158,6 +158,36 @@ harus membalas (artinya proxy AI jalan).
 
 ---
 
+## 7b. Langkah D2 — Setup email (kirim langsung dari app, opsional tapi disarankan)
+
+Fitur kirim email langsung (Outreach, email tagihan, follow-up lead) memakai SMTP. Default-nya Gmail.
+
+**Cara dapat Gmail App Password:**
+
+1. Pakai akun Google untuk Nusa Safety (idealnya Google Workspace, mis. `admin@nusasafety.co.id`, tapi `@gmail.com` juga bisa).
+2. Aktifkan **2-Step Verification**: https://myaccount.google.com/security
+3. Buka **App Passwords**: https://myaccount.google.com/apppasswords
+4. Buat password baru (pilih app "Mail"), Google menampilkan **16 huruf** — salin (hapus spasinya).
+5. Isi environment variable berikut (di `.env.local` untuk lokal, dan di Vercel untuk produksi):
+
+```
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_USER=admin@nusasafety.co.id      # alamat Gmail/Workspace Anda
+SMTP_PASS=abcdefghijklmnop            # 16 huruf App Password (tanpa spasi)
+SMTP_FROM=admin@nusasafety.co.id      # alamat pengirim (umumnya sama)
+SMTP_FROM_NAME=Nusa Safety            # nama yang tampil sebagai pengirim
+```
+
+6. Deploy ulang. Di app, buka **Outreach** — banner akan menampilkan "Email aktif". Tombol **Kirim** di template & **Tulis & kirim email** sekarang mengirim sungguhan, lengkap dengan lampiran media.
+
+**Catatan:**
+- Gmail biasa ada batas ~500 email/hari. Untuk kampanye massal, ganti ke ESP (Brevo/Mailketing/Resend) dengan mengubah `SMTP_HOST` & `SMTP_PORT` — semua kode tetap sama.
+- Untuk deliverability terbaik (tidak masuk spam) saat kirim dari domain sendiri, atur **SPF, DKIM, DMARC** di DNS domain Anda.
+- Jika App Passwords tidak muncul, pastikan 2-Step Verification benar-benar aktif & tunggu beberapa menit.
+
+---
+
 ## 8. Langkah E — Push ke GitHub
 
 ```bash

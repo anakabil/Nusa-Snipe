@@ -1,6 +1,6 @@
 {
   "name": "nusa-snipe",
-  "version": "1.4.0",
+  "version": "1.8.0",
   "private": true,
   "description": "Nusa Snipe — Marketing & Sales Intelligence Platform untuk PT. Nusa Rendra Jayatama (Nusa Safety)",
   "scripts": {
@@ -14,6 +14,7 @@
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "lucide-react": "0.383.0",
+    "nodemailer": "6.9.14",
     "xlsx": "0.18.5"
   },
   "devDependencies": {
