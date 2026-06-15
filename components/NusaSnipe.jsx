@@ -132,6 +132,31 @@ const storage = {
   },
 };
 
+/* Session disimpan LOKAL per-browser/perangkat (bukan di Redis bersama),
+   supaya login di satu perangkat tidak mengubah perangkat lain.
+   Pakai localStorage; bila diblokir (mis. preview sandbox) fallback ke memori. */
+const memSession = {};
+const sessionStore = {
+  get(key) {
+    try {
+      if (typeof localStorage !== "undefined") { const v = localStorage.getItem(key); if (v !== null) return v; }
+    } catch (e) { /* fall through */ }
+    return memSession[key] !== undefined ? memSession[key] : null;
+  },
+  set(key, value) {
+    try {
+      if (typeof localStorage !== "undefined") { localStorage.setItem(key, value); }
+    } catch (e) { /* fall through */ }
+    memSession[key] = value;
+  },
+  remove(key) {
+    try {
+      if (typeof localStorage !== "undefined") { localStorage.removeItem(key); }
+    } catch (e) { /* fall through */ }
+    delete memSession[key];
+  },
+};
+
 const PRODUCT_CATEGORIES = ["Sertifikasi", "Audit & Inspeksi", "Fire Protection", "Training", "Risk Assessment", "Konsultasi", "Lainnya"];
 const PRODUCT_UNITS = ["paket", "per hari (man-day)", "per titik", "per peserta", "per kunjungan", "per studi", "per dokumen", "per bulan"];
 
@@ -620,7 +645,7 @@ export default function NusaSnipe() {
       setUsers(parsedUsers);
 
       /* Session */
-      const sessionStr = await storage.get(STORAGE_KEYS.session);
+      const sessionStr = sessionStore.get(STORAGE_KEYS.session);
       const session = safeParse(sessionStr, null);
       if (session && session.userId) {
         const sessionUser = parsedUsers.find((u) => u.id === session.userId && u.active);
@@ -708,7 +733,7 @@ export default function NusaSnipe() {
   useEffect(() => { if (loaded) { Object.assign(COMPANY_CONFIG, company); storage.set(STORAGE_KEYS.company, JSON.stringify(company)); } }, [company, loaded]);
 
   const handleLogin = useCallback(async (user) => {
-    await storage.set(STORAGE_KEYS.session, JSON.stringify({ userId: user.id, at: new Date().toISOString() }));
+    sessionStore.set(STORAGE_KEYS.session, JSON.stringify({ userId: user.id, at: new Date().toISOString() }));
     setCurrentUser(user);
     setView("dashboard");
     setSelectedClientId(null);
@@ -717,7 +742,7 @@ export default function NusaSnipe() {
   const handleLogout = useCallback(async () => {
     const ok = await confirm("Yakin mau logout dari Nusa Snipe?");
     if (!ok) return;
-    await storage.clear(STORAGE_KEYS.session);
+    sessionStore.remove(STORAGE_KEYS.session);
     setCurrentUser(null);
     setView("dashboard");
     setSelectedClientId(null);
