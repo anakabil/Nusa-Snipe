@@ -36,24 +36,27 @@ import * as XLSX from "xlsx";
    ============================================================================ */
 
 const T = {
-  canvas: "#ECF2F6", surface: "#FFFFFF", surfaceAlt: "#F2F7FB",
-  ink: "#1C2B36", inkSoft: "#566873", inkFaint: "#8A9AA5",
-  rule: "#DCE7EE", ruleSoft: "#E8EFF4",
-  navy: "#2B7099", navyDark: "#1E5274", navySoft: "#E3F0F8",
-  red: "#B65C48", redSoft: "#F5E6E1",
-  amber: "#9A7549", amberSoft: "#F1E9DC",
-  sage: "#4F8264", sageSoft: "#E6F0E9",
+  canvas: "#F4F7FB", surface: "#FFFFFF", surfaceAlt: "#F1F5F9",
+  ink: "#0F1E2E", inkSoft: "#52617A", inkFaint: "#94A3B8",
+  rule: "#E3E9F2", ruleSoft: "#EDF1F7",
+  navy: "#2563EB", navyDark: "#1D4ED8", navySoft: "#E5EDFF",
+  red: "#EF4444", redSoft: "#FDE8E8",
+  amber: "#F59E0B", amberSoft: "#FEF3D6",
+  sage: "#10B981", sageSoft: "#D6F5E9",
 };
 
+// Modern gradient for primary CTAs (blue → indigo): gives an up-to-date, energetic feel.
+const GRAD_PRIMARY = "linear-gradient(135deg, #2563EB 0%, #4F46E5 100%)";
+
 const FONT_MONO = '"JetBrains Mono", "SF Mono", "Menlo", "Consolas", monospace';
-const FONT_SANS = '"Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif';
+const FONT_SANS = '"Plus Jakarta Sans", "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif';
 
 /* Subtle calming background texture: faint sky-blue dot grid + soft top glow.
    Low opacity so it's comfortable for all-day use. */
-const TEXTURE_URL = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='26'%3E%3Ccircle cx='2' cy='2' r='1' fill='%231E5274' fill-opacity='0.05'/%3E%3C/svg%3E";
+const TEXTURE_URL = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='26'%3E%3Ccircle cx='2' cy='2' r='1' fill='%232563EB' fill-opacity='0.045'/%3E%3C/svg%3E";
 const canvasBg = {
   backgroundColor: T.canvas,
-  backgroundImage: `radial-gradient(1100px 520px at 50% -8%, rgba(43,112,153,0.07), rgba(43,112,153,0) 62%), url("${TEXTURE_URL}")`,
+  backgroundImage: `radial-gradient(1100px 520px at 50% -8%, rgba(37,99,235,0.07), rgba(37,99,235,0) 62%), url("${TEXTURE_URL}")`,
 };
 
 /* ============== BRAND ASSETS (Nusa Safety) ============== */
@@ -587,7 +590,7 @@ export default function NusaSnipe() {
   const [currentUser, setCurrentUser] = useState(null);
   const [users, setUsers] = useState([]);
 
-  // Inject professional fonts (Inter for UI, JetBrains Mono for labels) once.
+  // Inject modern fonts (Plus Jakarta Sans for UI, JetBrains Mono for labels) + global interaction styles once.
   useEffect(() => {
     if (typeof document === "undefined") return;
     if (document.getElementById("nusa-fonts")) return;
@@ -595,8 +598,30 @@ export default function NusaSnipe() {
     const pre2 = document.createElement("link"); pre2.rel = "preconnect"; pre2.href = "https://fonts.gstatic.com"; pre2.crossOrigin = "anonymous";
     const link = document.createElement("link");
     link.id = "nusa-fonts"; link.rel = "stylesheet";
-    link.href = "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap";
+    link.href = "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap";
     document.head.appendChild(pre1); document.head.appendChild(pre2); document.head.appendChild(link);
+
+    const style = document.createElement("style");
+    style.id = "nusa-global-style";
+    style.textContent = `
+      button { cursor: pointer; transition: background-color .16s ease, color .16s ease, border-color .16s ease, box-shadow .16s ease, transform .12s ease, opacity .16s ease; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+      button:active:not(:disabled) { transform: scale(0.975); }
+      button:disabled { cursor: not-allowed; opacity: 0.55; }
+      a, [role="button"] { -webkit-tap-highlight-color: transparent; }
+      :focus-visible { outline: 2px solid ${T.navy}; outline-offset: 2px; }
+      input, textarea, select { transition: border-color .16s ease, box-shadow .16s ease; }
+      input:focus, textarea:focus, select:focus { outline: none; border-color: ${T.navy}; box-shadow: 0 0 0 3px ${T.navySoft}; }
+      .snipe-nav-item:not(.snipe-nav-active):hover { background: ${T.ruleSoft} !important; color: ${T.ink} !important; }
+      .snipe-card-hover { transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+      .snipe-card-hover:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(15,30,46,0.10); }
+      .snipe-cta:hover { box-shadow: 0 8px 22px rgba(37,99,235,0.32); transform: translateY(-1px); }
+      ::-webkit-scrollbar { width: 10px; height: 10px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: ${T.rule}; border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+      ::-webkit-scrollbar-thumb:hover { background: ${T.inkFaint}; border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+      * { scrollbar-width: thin; scrollbar-color: ${T.rule} transparent; }
+    `;
+    document.head.appendChild(style);
   }, []);
 
   const [view, setView] = useState("dashboard");
@@ -986,26 +1011,29 @@ export default function NusaSnipe() {
 /* ============== SIDEBAR ============== */
 function Sidebar({ view, onView, onOpenAi, currentUser, onLogout, unreadReplies, newSignals, billingAlerts, newLeads }) {
   const items = [
-    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["admin", "sales"] },
+    { section: "Alur Penjualan" },
+    { id: "products", label: "Produk & Jasa", icon: Tag, roles: ["admin", "sales"] },
+    { id: "outreach", label: "Outreach", icon: Megaphone, roles: ["admin", "sales"] },
     { id: "hunter", label: "Prospect Hunter", icon: Radar, roles: ["admin", "sales"], badge: newSignals, badgeColor: T.red },
     { id: "leads", label: "Lead Capture", icon: UserPlus, roles: ["admin", "sales"], badge: newLeads, badgeColor: T.sage },
     { id: "clients", label: "Klien", icon: Users, roles: ["admin", "sales"] },
-    { id: "pipeline", label: "Pipeline", icon: Workflow, roles: ["admin", "sales"] },
-    { id: "forecast", label: "Sales Forecast", icon: Target, roles: ["admin", "sales"] },
-    { id: "products", label: "Produk & Jasa", icon: Tag, roles: ["admin", "sales"] },
     { id: "proposals", label: "Proposal", icon: ClipboardList, roles: ["admin", "sales"] },
+    { id: "pipeline", label: "Pipeline (Deal)", icon: Workflow, roles: ["admin", "sales"] },
     { id: "billing", label: "Penagihan", icon: Wallet, roles: ["admin", "sales"], badge: billingAlerts, badgeColor: T.red },
-    { id: "reports", label: "Laporan", icon: BarChart3, roles: ["admin", "sales"] },
-    { id: "outreach", label: "Outreach", icon: Megaphone, roles: ["admin", "sales"] },
-    { id: "booking", label: "Booking", icon: CalendarCheck, roles: ["admin", "sales"] },
+    { section: "Monitoring" },
+    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["admin", "sales"] },
+    { id: "forecast", label: "Sales Forecast", icon: Target, roles: ["admin", "sales"] },
     { id: "inbox", label: "Inbox", icon: Inbox, roles: ["admin", "sales"], badge: unreadReplies, badgeColor: T.amber },
+    { id: "booking", label: "Booking", icon: CalendarCheck, roles: ["admin", "sales"] },
+    { id: "reports", label: "Laporan", icon: BarChart3, roles: ["admin", "sales"] },
+    { section: "Sistem" },
     { id: "copilot", label: "AI Assistant", icon: Sparkles, roles: ["admin", "sales"] },
     { id: "users", label: "Pengguna", icon: UserCog, roles: ["admin"] },
     { id: "company", label: "Perusahaan", icon: Building2, roles: ["admin"] },
     { id: "settings", label: "Pengaturan", icon: Settings, roles: ["admin", "sales"] },
     { id: "about", label: "About", icon: Info, roles: ["admin", "sales"] },
   ];
-  const allowed = items.filter((i) => i.roles.includes(currentUser.role));
+  const visibleItems = items.filter((i) => i.section || i.roles.includes(currentUser.role));
   return (
     <aside className="w-60 min-h-screen border-r flex flex-col" style={{ background: T.surface, borderColor: T.rule }}>
       <div className="px-5 py-5 border-b" style={{ borderColor: T.rule }}>
@@ -1020,17 +1048,25 @@ function Sidebar({ view, onView, onOpenAi, currentUser, onLogout, unreadReplies,
         </div>
       </div>
       <nav className="px-3 py-4 flex-1 overflow-y-auto">
-        {allowed.map((item) => {
+        {visibleItems.map((item, idx) => {
+          if (item.section) {
+            return (
+              <p key={"sec-" + idx} className="text-[10px] font-bold uppercase tracking-wider px-3 mb-1.5" style={{ color: T.inkFaint, fontFamily: FONT_MONO, marginTop: idx === 0 ? 2 : 18 }}>
+                {item.section}
+              </p>
+            );
+          }
           const Icon = item.icon;
           const active = view === item.id;
           const hasBadge = item.badge && item.badge > 0;
           return (
-            <button key={item.id} onClick={() => onView(item.id)} className="w-full flex items-center gap-3 px-3 py-2 rounded-md mb-0.5 text-sm transition-colors" style={{ background: active ? T.navySoft : "transparent", color: active ? T.navy : T.inkSoft, fontWeight: active ? 500 : 400 }}>
-              <Icon size={16} strokeWidth={active ? 2.25 : 1.75} />
+            <button key={item.id} onClick={() => onView(item.id)} className={`snipe-nav-item ${active ? "snipe-nav-active" : ""} w-full flex items-center gap-3 px-3 py-2 rounded-lg mb-0.5 text-[13.5px] relative`} style={{ background: active ? T.navySoft : "transparent", color: active ? T.navy : T.inkSoft, fontWeight: active ? 600 : 500 }}>
+              {active && <span className="absolute left-0 top-1/2 rounded-r-full" style={{ width: 3, height: 18, marginTop: -9, background: T.navy }} />}
+              <Icon size={17} strokeWidth={active ? 2.4 : 1.9} />
               <span className="flex-1 text-left">{item.label}</span>
               {item.id === "users" && <ShieldCheck size={11} style={{ color: T.amber }} />}
               {hasBadge && (
-                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full min-w-[18px] text-center" style={{ background: item.badgeColor, color: "#fff", fontFamily: FONT_MONO }}>
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center" style={{ background: item.badgeColor, color: "#fff", fontFamily: FONT_MONO }}>
                   {item.badge}
                 </span>
               )}
@@ -1051,7 +1087,7 @@ function Sidebar({ view, onView, onOpenAi, currentUser, onLogout, unreadReplies,
             <LogOut size={13} style={{ color: T.inkSoft }} />
           </button>
         </div>
-        <button onClick={onOpenAi} className="w-full flex items-center gap-2 px-3 py-2.5 rounded-md text-white text-sm font-medium" style={{ background: T.navy }}>
+        <button onClick={onOpenAi} className="snipe-cta w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-white text-[13.5px] font-semibold" style={{ background: GRAD_PRIMARY }}>
           <Sparkles size={14} />
           <span>Buka AI Assistant</span>
         </button>
@@ -2489,7 +2525,7 @@ function LoginScreen({ users, onLogin }) {
                 <p className="text-[12px]" style={{ color: T.red }}>{error}</p>
               </div>
             )}
-            <button onClick={handleSubmit} disabled={submitting} className="w-full py-2.5 rounded-md text-white text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-60" style={{ background: T.navy }}>
+            <button onClick={handleSubmit} disabled={submitting} className="snipe-cta w-full py-2.5 rounded-lg text-white text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-60" style={{ background: GRAD_PRIMARY }}>
               {submitting ? <><Loader2 size={14} className="animate-spin" /> Memverifikasi…</> : <><KeyRound size={14} /> Masuk</>}
             </button>
           </div>
